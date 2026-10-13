@@ -39,7 +39,7 @@ with open('config.json', 'r') as file:
 pipeline = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
 if data.get('fairness_enforcement', {}).get('diffusion_GPU'):
     print("Use GPU for the image synthesis task")
-    pipeline.to("cuda")
+    pipeline.to("mps" if torch.backends.mps.is_available() else "cuda")
 else:
     print("Use CPU for the image synthesis task")    
 
@@ -281,4 +281,4 @@ def get_image(filename):
 if __name__ == '__main__':
     if not os.path.exists('generated_images'):
         os.makedirs('generated_images')
-    app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False,port=5000) #turn off Flask's auto-reloader
