@@ -18,6 +18,9 @@ import random
 import json
 import sys
 
+# Target-based enforcement: target distribution -> deadlines (beta per group value) -> scheduler
+from targets import build_plan, DeadlineScheduler
+
 def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -175,13 +178,47 @@ fairness_cgvs = cgvs_map[fairness_group]
 
 
 
-if beta < len(fairness_cgvs):
-    err_msg = "The length of the items should at least be as large as the beta value"
-    print(f"Error: {err_msg}", file=sys.stderr)
-    sys.exit(1)
+# Switch between the two code paths:
+#  - setup WITHOUT a "target" block (e.g. successful_business_leader): original code of the paper
+#  - setup WITH a "target" block (e.g. gender_occupation): target-based enforcement via targets.py
+use_targets = 'target' in setup_cfg
+
+if not use_targets:
+    # ----- Original code path: one uniform beta for all group values -----
+
+    if beta < len(fairness_cgvs):
+        err_msg = "The length of the items should at least be as large as the beta value"
+        print(f"Error: {err_msg}", file=sys.stderr)
+        sys.exit(1)
 
 
-counters = {item: beta for item in fairness_cgvs}
+    counters = {item: beta for item in fairness_cgvs}
+
+else:
+    # ----- Target-based code path -----
+
+    # Turn the target distribution of the setup into one deadline per group value
+    try:
+        plan = build_plan(setup_cfg, fairness_cgvs)
+    except ValueError as err:
+        # Inconsistent config, e.g. a group value missing or shares not summing to 1
+        print(f"Error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    # Show what will be enforced, so a wrong config is noticed before any image is generated
+    print(f"Target mode: {plan['mode']}")
+    # Target share per group value (None in mode "cheng", which has no target distribution)
+    print(f"Target distribution: {plan['target']}")
+    # Deadline per group value: "at least once in every beta images"
+    print(f"Deadlines (beta): {plan['beta']}")
+    # Guaranteed minimum share per group value = 1 / beta
+    print(f"Guaranteed minimum shares: { {v: round(1 / b, 3) for v, b in plan['beta'].items()} }")
+    # Group values without a deadline; their share is left to the generator
+    print(f"No deadline: {plan['unconstrained']}")
+
+    # Scheduler that decides before each related image whether to enforce a group value.
+    # Ties between equally urgent values are broken by the target shares (uniform in mode "cheng").
+    scheduler = DeadlineScheduler(plan['beta'], weights=plan['target'])
 
 
 
