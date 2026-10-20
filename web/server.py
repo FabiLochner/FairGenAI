@@ -17,6 +17,7 @@ import random
 
 import json
 import sys
+import time  # timestamps and run id for the request log
 
 # Target-based enforcement: target distribution -> deadlines (beta per group value) -> scheduler
 from targets import build_plan, DeadlineScheduler
@@ -221,6 +222,26 @@ else:
     scheduler = DeadlineScheduler(plan['beta'], weights=plan['target'])
 
 
+# ----- Request log (both code paths) -----
+# One JSON line per request, so realised distributions, intervention rates and failed
+# enforcements can be computed afterwards. The file is appended to across server runs.
+log_path = os.path.join('generated_images', 'enforcement_log.jsonl')
+# Start time of this server run; separates the runs within the same log file
+run_id = time.strftime('%Y-%m-%d_%H-%M-%S')
+# Name of the code path, stored with every request: "original" or the target mode (e.g. "empirical")
+path_mode = plan['mode'] if use_targets else 'original'
+
+
+def log_request(record):
+    """Append one request record as a single JSON line to the log file."""
+    # Same fields for every request: run, setup and code path
+    record = {'run_id': run_id, 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+              'setup': active_setup, 'mode': path_mode, **record}
+    # ensure_ascii=False keeps characters like "ä" readable in the file
+    with open(log_path, 'a', encoding='utf-8') as log_file:
+        log_file.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+
 
 
 
@@ -233,6 +254,9 @@ def process_instruction():
         # Counters of the target-based path: images left until each deadline runs out
         print(scheduler.counters)
 
+    # Copy of the counters before this request, for the log
+    counters_before = dict(counters) if not use_targets else dict(scheduler.counters)
+
     data = request.get_json()
     
     # Print the received POST data
@@ -242,7 +266,12 @@ def process_instruction():
     if not data.get('instruction'):
         return jsonify({'error': 'No instruction provided'}), 400
 
-    topic_monitoring = False    
+    topic_monitoring = False
+
+    # Defaults for the log; these variables are only set further down if the corresponding step runs
+    fairness_dimension_query = None  # gate answer "does the prompt already ask for a group value?"
+    attribute = None                 # raw answer of the vision model (None = no vision check)
+    concept_group_value = None       # group value used for the counter update
 
     # Check if the prompt is related to the topic, and if user has special requests on the dimension
     prompt_topic = check_prompt_topic(instruction, conditioned_value).strip().lower()
@@ -383,6 +412,32 @@ def process_instruction():
             # Update the deadlines with the detected value; None changes nothing
             scheduler.update(concept_group_value)
             print(scheduler.counters)
+
+    # Write one log line for this request (both code paths)
+    log_request({
+        # What the user typed into the form
+        'user_prompt': data.get('instruction'),
+        # Gate answer: is the prompt related to conditioned_value? (Algorithm 1, line 4)
+        'gate_related': prompt_topic,
+        # Gate answer: does the prompt already ask for a group value? (None if not related)
+        'gate_group_specified': fairness_dimension_query,
+        # True if the image counts towards the deadlines (related and no group value requested)
+        'monitored': topic_monitoring,
+        # Group value enforced by the appended clause (None = prompt unchanged)
+        'enforced': enforced_cgv or None,
+        # Raw answer of the vision model (None = not checked; the original path skips enforced images)
+        'vision_answer': attribute,
+        # Group value used for the counter update (None = not counted).
+        # In the original path this is the ENFORCED value for enforced images, not a detected one.
+        'counted_as': concept_group_value or None,
+        # Counters before and after this request
+        'counters_before': counters_before,
+        'counters_after': dict(counters) if not use_targets else dict(scheduler.counters),
+        # Exact prompt sent to Stable Diffusion (clause + LLM description + clause)
+        'image_prompt': img_enforcement_prompt + llm_response + img_enforcement_prompt,
+        # Generated image in generated_images/
+        'image_file': image_filename,
+    })
 
     if enforced_cgv == "":
          return jsonify({
