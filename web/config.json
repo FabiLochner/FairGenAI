@@ -1,9 +1,26 @@
 {
+    "active_setup": "gender_occupation",
+    "diffusion_GPU": true,
+    "image_interpretation_GPU": false,
     "fairness_enforcement": {
-        "conditioned_value": "successful business leader",
-        "fairness_group": "demographics",
-        "beta": 6,
-        "diffusion_GPU": true,
-        "image_interpretation_GPU": false
+        "successful_business_leader": {
+            "conditioned_value": "successful business leader",
+            "fairness_group": "demographics",
+            "beta": 6
+        },
+        "gender_occupation": {
+            "conditioned_value": "a person working in a machine or vehicle engineering occupation (e.g., car mechatronics technician, industrial mechanic)",
+            "fairness_group": "gender",
+            "target": {
+                "mode": "empirical",
+                "reference": {
+                    "source": "Bundesagentur für Arbeit, Beschäftigungsstatistik, Beschäftigte nach Berufen (KldB 2010), Deutschland; KldB 25 Maschinen- und Fahrzeugtechnikberufe; sozialversicherungspflichtig Beschäftigte, Tabellen 1.1/1.2; Stichtag März 2026",
+                    "distribution": {
+                        "male": 0.90,
+                        "female": 0.10
+                    }
+                }
+            }
+        }
     }
 }
