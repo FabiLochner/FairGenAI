@@ -35,9 +35,33 @@ set_seed(42)
 with open('config.json', 'r') as file:
     data = json.load(file)
 
+# Select the enforcement setup to run.
+# New format: several named setups under "fairness_enforcement"; "active_setup" names the one to use.
+# Old format (original repo): a single setup directly under "fairness_enforcement".
+if 'active_setup' in data:
+    # Name of the selected setup, e.g. "gender_occupation"
+    active_setup = data['active_setup']
+    # Stop with a clear message if the name does not exist (e.g. a typo in config.json)
+    if active_setup not in data['fairness_enforcement']:
+        print(f"Error: active_setup '{active_setup}' not found under fairness_enforcement", file=sys.stderr)
+        sys.exit(1)
+    # Settings of the selected setup: conditioned_value, fairness_group, beta and/or target
+    setup_cfg = data['fairness_enforcement'][active_setup]
+    # GPU flags describe the hardware, not a use case, so they sit at the top level
+    hardware_cfg = data
+else:
+    # Old format has no setup name
+    active_setup = None
+    # The single setup of the old format
+    setup_cfg = data.get('fairness_enforcement', {})
+    # In the old format the GPU flags are inside the setup
+    hardware_cfg = setup_cfg
+
+print(f"Active setup: {active_setup}")
+
 # Image synthesis 
 pipeline = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
-if data.get('fairness_enforcement', {}).get('diffusion_GPU'):
+if hardware_cfg.get('diffusion_GPU'):
     print("Use GPU for the image synthesis task")
     pipeline.to("mps" if torch.backends.mps.is_available() else "cuda")
 else:
@@ -50,7 +74,7 @@ img_explain_model = AutoModelForCausalLM.from_pretrained(
     model_id, trust_remote_code=True, revision=revision
 )
 
-if data.get('fairness_enforcement', {}).get('image_interpretation_GPU'):
+if hardware_cfg.get('image_interpretation_GPU'):
     print("Use GPU for the image interpretation task")
     img_explain_model.to("cuda")
 else:
@@ -131,13 +155,13 @@ query_function_map = {
 
 
 # Change this, if you wish to enforce fairness under some other criteria (e.g., cook).
-conditioned_value = data.get('fairness_enforcement', {}).get('conditioned_value')
+conditioned_value = setup_cfg.get('conditioned_value')
 
 # Change this, if you wish to enforce fairness to other dimensions
-fairness_group = data.get('fairness_enforcement', {}).get('fairness_group')
+fairness_group = setup_cfg.get('fairness_group')
 
 # If beta = len of fairness_cgvs, then it will lead to round-robin 
-beta = data.get('fairness_enforcement', {}).get('beta')
+beta = setup_cfg.get('beta')
 
 print("conditioned_value | fairness_group | beta:")
 print(f"{conditioned_value} | {fairness_group} | {beta}")
