@@ -317,34 +317,72 @@ def process_instruction():
     # Perform fainess counter update
     if topic_monitoring == True:
 
-        concept_group_value = ""
+        if not use_targets:
+            # ----- Original code path -----
 
-        if enforced_cgv != "":
-            # Here we are explicitly assuming that the enforcement works so there is no need to double check. 
-            concept_group_value = enforced_cgv
+            concept_group_value = ""
+
+            if enforced_cgv != "":
+                # Here we are explicitly assuming that the enforcement works so there is no need to double check.
+                concept_group_value = enforced_cgv
+            else:
+                # Use the vision-based interpreter to check the class
+                image_pil = Image.open(image_path)
+                enc_image = img_explain_model.encode_image(image_pil)
+                attribute = img_explain_model.answer_question(enc_image, image_question_map[fairness_group], tokenizer).strip().lower()
+                print("The synthesized image has the attribute: "+attribute)
+                is_contained = False
+                for item in cgvs_map[fairness_group]:
+                    # Check if the function's output is a substring of the list item
+                    if attribute.lower() in item.lower():
+                        concept_group_value = item
+                        is_contained = True
+                        break
+                if is_contained == False and ("other" not in attribute):
+                    err_msg = "The image explaination model produces an answer (apart from other): "+ attribute
+                    print(f"Error: {err_msg}", file=sys.stderr)
+                    sys.exit(1)
+
+            for item in counters:
+                if item == concept_group_value:
+                    counters[item] = beta
+                else:
+                    counters[item] -= 1
+
         else:
+            # ----- Target-based code path -----
+            # Same detection as the original path, with three changes (marked CHANGE 1-3)
+
+            # None = the image does not count ("removal", Definition 3 of the paper)
+            concept_group_value = None
+
+            # CHANGE 1: no shortcut for enforced images. EVERY image is checked with the vision model
+            # (Algorithm 1, line 13), so a clause the generator ignored is noticed.
             # Use the vision-based interpreter to check the class
             image_pil = Image.open(image_path)
             enc_image = img_explain_model.encode_image(image_pil)
             attribute = img_explain_model.answer_question(enc_image, image_question_map[fairness_group], tokenizer).strip().lower()
             print("The synthesized image has the attribute: "+attribute)
-            is_contained = False
             for item in cgvs_map[fairness_group]:
+                # CHANGE 2: skip empty answers. An empty string is a substring of every label
+                # and would otherwise be counted as the first group value (e.g. "male").
                 # Check if the function's output is a substring of the list item
-                if attribute.lower() in item.lower():
+                if attribute != "" and attribute.lower() in item.lower():
                     concept_group_value = item
-                    is_contained = True
                     break
-            if is_contained == False and ("other" not in attribute):
-                err_msg = "The image explaination model produces an answer (apart from other): "+ attribute
-                print(f"Error: {err_msg}", file=sys.stderr)
-                sys.exit(1)
+            # CHANGE 3: "other", empty or unexpected answers keep concept_group_value = None, so the image
+            # does not count. The original path decrements every counter for "other" and stops the
+            # server with sys.exit for unexpected answers.
+            if concept_group_value is None:
+                print("The image is not counted (vision model answer: '{}')".format(attribute))
 
-        for item in counters:
-            if item == concept_group_value:
-                counters[item] = beta
-            else:
-                counters[item] -= 1
+            # Report when the generator did not follow the enforcement clause
+            if enforced_cgv != "" and concept_group_value != enforced_cgv:
+                print("ENFORCEMENT FAILED: requested '{}', vision model saw '{}'".format(enforced_cgv, concept_group_value))
+
+            # Update the deadlines with the detected value; None changes nothing
+            scheduler.update(concept_group_value)
+            print(scheduler.counters)
 
     if enforced_cgv == "":
          return jsonify({
