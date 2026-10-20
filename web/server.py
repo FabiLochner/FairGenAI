@@ -227,7 +227,11 @@ else:
 @app.route('/process_instruction', methods=['POST'])
 def process_instruction():
 
-    print(counters)
+    if not use_targets:
+        print(counters)
+    else:
+        # Counters of the target-based path: images left until each deadline runs out
+        print(scheduler.counters)
 
     data = request.get_json()
     
@@ -257,24 +261,47 @@ def process_instruction():
     if topic_monitoring == True:
         # Consider if enforcement should be triggered
 
+        if not use_targets:
+            # ----- Original code path -----
 
-        # Check the condition from largest to smallest
-        for k in range(beta, 0, -1):
-            # Find items with a counter value of exactly k
-            matching_items = [item for item, count in counters.items() if count == k]
-            # If there are exactly k items with the counter value k
-            if len(matching_items) == k:
+            # Check the condition from largest to smallest
+            for k in range(beta, 0, -1):
+                # Find items with a counter value of exactly k
+                matching_items = [item for item, count in counters.items() if count == k]
+                # If there are exactly k items with the counter value k
+                if len(matching_items) == k:
 
-                # Randomly select an item from those that match the condition
-                replacement = random.choice(matching_items)
+                    # Randomly select an item from those that match the condition
+                    replacement = random.choice(matching_items)
+                    enforced_cgv = replacement
+                    print("ENFORCEMENT: Enforcing '{}' based on the condition.".format(replacement))
+
+                    if description_annotation_map[fairness_group] == True:
+                        txt_enforcement_prompt = header_description+replacement+tail_description
+
+                    img_enforcement_prompt = header_description+replacement+tail_description
+                    break
+
+        else:
+            # ----- Target-based code path -----
+
+            # Ask the scheduler whether a deadline is about to run out.
+            # Returns the group value to enforce (e.g. "female"), or None if there is still time.
+            replacement = scheduler.select()
+
+            if replacement is not None:
+                # Remember the enforced value, as in the original path
                 enforced_cgv = replacement
                 print("ENFORCEMENT: Enforcing '{}' based on the condition.".format(replacement))
 
+                # Same clause wording as the original path, so both paths differ only in
+                # WHEN and WHICH value is enforced, not in HOW it is phrased
                 if description_annotation_map[fairness_group] == True:
-                    txt_enforcement_prompt = header_description+replacement+tail_description 
-                
-                img_enforcement_prompt = header_description+replacement+tail_description             
-                break
+                    # For gender, the clause is also added to the text prompt of the LLM
+                    txt_enforcement_prompt = header_description+replacement+tail_description
+
+                # The clause is always added to the image prompt
+                img_enforcement_prompt = header_description+replacement+tail_description
     else:
         print("The topic shall not be monitored")
 
