@@ -52,6 +52,8 @@ Which models run is chosen independently of the enforcement setup, in three part
 * "pipelines": named model combinations. Each pipeline names one catalog entry for "image_generation", "gate_llm" (checks whether a prompt is related and already asks for a group value), "story_llm" (writes the description passed to the image model) and "image_interpretation".
 * "active_pipeline": the pipeline to run.
 
+"story_llm": null turns the story step off: the user prompt (plus the enforcement clause) goes directly to the image model, while the gate still uses "gate_llm". "cheng2025_baseline_no_story" is an example.
+
 "cheng2025_baseline" is the model combination of the original paper and repo. To test another model, add it to the catalog once and add a new pipeline that refers to it; existing pipelines stay unchanged. Without "active_pipeline", the server runs "cheng2025_baseline".
 
 Every line of generated_images/enforcement_log.jsonl records the active pipeline ("pipeline") and its models ("models": name, model_id and revision per role), so runs with different model combinations can be told apart in the same log file.

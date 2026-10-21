@@ -94,6 +94,10 @@ if 'active_pipeline' in data:
     models = {}
     for role, section in catalog_sections.items():
         name = pipeline_cfg.get(role)
+        # An explicit "story_llm": null turns the story step off: the user prompt goes directly to the image model
+        if role == 'story_llm' and role in pipeline_cfg and name is None:
+            models[role] = None
+            continue
         catalog = data.get('model_catalog', {}).get(section, {})
         if name not in catalog:
             print(f"Error: {role} '{name}' of pipeline '{active_pipeline}' not found under model_catalog.{section}", file=sys.stderr)
@@ -106,7 +110,7 @@ else:
 
 print(f"Active pipeline: {active_pipeline}")
 for role, model in models.items():
-    print(f"  {role}: {model}")
+    print(f"  {role}: {model if model is not None else 'None (story step off)'}")
 
 # Image synthesis
 pipeline = DiffusionPipeline.from_pretrained(models['image_generation']['model_id'], torch_dtype=torch.float16)
@@ -141,8 +145,8 @@ CORS(app)  # This will enable CORS for all routes
 #llm = Ollama(model="llama3", request_timeout=120.0)
 # Gate LLM: checks whether a prompt is related to conditioned_value and already asks for a group value
 gate_llm = Ollama(model=models['gate_llm']['model_id'], request_timeout=120.0)
-# Story LLM: writes the description that is passed to the image model
-story_llm = Ollama(model=models['story_llm']['model_id'], request_timeout=120.0)
+# Story LLM: writes the description that is passed to the image model (None = no story step)
+story_llm = Ollama(model=models['story_llm']['model_id'], request_timeout=120.0) if models['story_llm'] is not None else None
 
 header_description = " The person has a strong "
 tail_description = " looking."
@@ -386,14 +390,21 @@ def process_instruction():
     else:
         print("The topic shall not be monitored")
 
-    # Generate image description
-    llm_response = generate_description_local_llm( txt_enforcement_prompt + instruction + txt_enforcement_prompt)
+    if story_llm is not None:
+        # Generate image description
+        llm_response = generate_description_local_llm( txt_enforcement_prompt + instruction + txt_enforcement_prompt)
+        image_prompt = img_enforcement_prompt + llm_response + img_enforcement_prompt
+    else:
+        # No story step: the user prompt goes directly to the image model, with the same clause before and after.
+        # No template (e.g. "a photo of") is added, so both conditions differ only in the story step.
+        llm_response = "(No story step: the prompt was sent directly to the image model.)"
+        image_prompt = img_enforcement_prompt + data.get('instruction') + img_enforcement_prompt
     
     # Generate an image using Stable Diffusion
     image_filename = f"{uuid.uuid4()}.png"
     image_path = os.path.join('generated_images', image_filename)
     print(str(image_filename))
-    generate_image_from_text(img_enforcement_prompt + llm_response + img_enforcement_prompt, image_path)
+    generate_image_from_text(image_prompt, image_path)
 
     # Perform fainess counter update
     if topic_monitoring == True:
@@ -485,8 +496,9 @@ def process_instruction():
         # Counters before and after this request
         'counters_before': counters_before,
         'counters_after': dict(counters) if not use_targets else dict(scheduler.counters),
-        # Exact prompt sent to Stable Diffusion (clause + LLM description + clause)
-        'image_prompt': img_enforcement_prompt + llm_response + img_enforcement_prompt,
+        # Exact prompt sent to the image model (clause + LLM description + clause,
+        # or clause + user prompt + clause without the story step)
+        'image_prompt': image_prompt,
         # Generated image in generated_images/
         'image_file': image_filename,
     })

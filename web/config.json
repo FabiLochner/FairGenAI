@@ -31,6 +31,13 @@
             "gate_llm": "gemma2_2b",
             "story_llm": "gemma2_2b",
             "image_interpretation": "moondream2_2024_07_23"
+        },
+        "cheng2025_baseline_no_story": {
+            "description": "Models of cheng2025_baseline without the story step: the user prompt (plus enforcement clause) goes directly to the image model. Measures the image model's bias without the LLM rewriting it.",
+            "image_generation": "sd_1_5",
+            "gate_llm": "gemma2_2b",
+            "story_llm": null,
+            "image_interpretation": "moondream2_2024_07_23"
         }
     },
     "fairness_enforcement": {
