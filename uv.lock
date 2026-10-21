@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2024-08-15T00:00:00Z"
+exclude-newer = "2025-01-16T00:00:00Z"
 
 [[package]]
 name = "accelerate"
@@ -242,7 +242,7 @@ wheels = [
 
 [[package]]
 name = "diffusers"
-version = "0.30.0"
+version = "0.32.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -254,9 +254,9 @@ dependencies = [
     { name = "requests" },
     { name = "safetensors" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/63/bba1b32402a199c580b8b8649b75bd27834cdbb82d7c9f732608bb07ad1a/diffusers-0.30.0.tar.gz", hash = "sha256:57acd59cab035f62bde1108fc4c93e76e6988a5b3f8ae9f06051146c1cecb2aa", size = 2089547, upload-time = "2024-08-07T07:33:56.149Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/72/d3f715e71a77f14a48f1ac081cea5bb6c6e6cd41c55b1291f401b1504679/diffusers-0.32.2.tar.gz", hash = "sha256:eb1e36b326aabb0675729af7c626caf7a76ce7ced3a126e879331790b1eaa230", size = 2614622, upload-time = "2025-01-15T15:45:22.383Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/2b/69bb842f7567cd92a540f8a9a63a20e09304ad8ff84530f26762e7e19626/diffusers-0.30.0-py3-none-any.whl", hash = "sha256:114194eb61498aff06243ade750fca6fbc179ca9df68923bb175b70030bed495", size = 2630173, upload-time = "2024-08-07T07:33:53.334Z" },
+    { url = "https://files.pythonhosted.org/packages/88/c9/2b2e822d871b06605363e52555be5d7ff0996f4eeaf0f7e5fda15adedfbe/diffusers-0.32.2-py3-none-any.whl", hash = "sha256:d7f182b49c7f428737ee3bf6397d463ec03b85f4f3b2c9470bd1d73292b609ff", size = 3226075, upload-time = "2025-01-15T15:45:20.188Z" },
 ]
 
 [[package]]
@@ -307,7 +307,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = "==0.33.0" },
-    { name = "diffusers", specifier = "==0.30.0" },
+    { name = "diffusers", specifier = "==0.32.2" },
     { name = "einops", specifier = "==0.8.0" },
     { name = "flask", specifier = "==3.0.3" },
     { name = "flask-cors", specifier = "==4.0.1" },

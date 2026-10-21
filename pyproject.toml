@@ -4,7 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "accelerate==0.33.0",
-    "diffusers==0.30.0",
+    # 0.32.2 supports SD 3.5 Medium and still works with transformers 4.44 (huggingface-hub < 1.0)
+    "diffusers==0.32.2",
     "einops==0.8.0",
     "flask==3.0.3",
     "flask-cors==4.0.1",
@@ -17,4 +18,5 @@ dependencies = [
 ]
 
 [tool.uv]
-exclude-newer = "2024-08-15T00:00:00Z" 
+# Day after the diffusers 0.32.2 release (2025-01-15); all other packages stay pinned as before
+exclude-newer = "2025-01-16T00:00:00Z"
