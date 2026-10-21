@@ -189,6 +189,11 @@ image_question_map = {
 
 }
 
+# Asked before the group question in the target-based path; the same for every fairness_group.
+# "human" excludes robots, mascots and cartoon figures, which the group question would still
+# assign to a group value (e.g. "female").
+person_question = "Is there a human person in the image? Answer \"yes\" or \"no\" only."
+
 description_annotation_map = {
     'gender': True,
     'demographics': False
@@ -326,6 +331,7 @@ def process_instruction():
 
     # Defaults for the log; these variables are only set further down if the corresponding step runs
     fairness_dimension_query = None  # gate answer "does the prompt already ask for a group value?"
+    person_answer = None             # raw answer of the vision model to person_question (None = not asked)
     attribute = None                 # raw answer of the vision model (None = no vision check)
     concept_group_value = None       # group value used for the counter update
 
@@ -443,7 +449,7 @@ def process_instruction():
 
         else:
             # ----- Target-based code path -----
-            # Same detection as the original path, with three changes (marked CHANGE 1-3)
+            # Same detection as the original path, with four changes (marked CHANGE 1-4)
 
             # None = the image does not count ("removal", Definition 3 of the paper)
             concept_group_value = None
@@ -452,21 +458,33 @@ def process_instruction():
             # (Algorithm 1, line 13), so a clause the generator ignored is noticed.
             # Use the vision-based interpreter to check the class
             image_pil = Image.open(image_path)
+            # Encoded once, used for both questions
             enc_image = img_explain_model.encode_image(image_pil)
-            attribute = img_explain_model.answer_question(enc_image, image_question_map[fairness_group], tokenizer).strip().lower()
-            print("The synthesized image has the attribute: "+attribute)
-            for item in cgvs_map[fairness_group]:
-                # CHANGE 2: skip empty answers. An empty string is a substring of every label
-                # and would otherwise be counted as the first group value (e.g. "male").
-                # Check if the function's output is a substring of the list item
-                if attribute != "" and attribute.lower() in item.lower():
-                    concept_group_value = item
-                    break
-            # CHANGE 3: "other", empty or unexpected answers keep concept_group_value = None, so the image
-            # does not count. The original path decrements every counter for "other" and stops the
-            # server with sys.exit for unexpected answers.
-            if concept_group_value is None:
-                print("The image is not counted (vision model answer: '{}')".format(attribute))
+
+            # CHANGE 4: first ask whether a human person is in the image at all. Without a person
+            # the image does not count, and the group question is skipped: otherwise the vision model
+            # still assigns a group value, e.g. "female" for a robot or an empty workshop.
+            # startswith instead of "yes" in ..., so that e.g. "no, ... eyes ..." is not read as "yes".
+            person_answer = img_explain_model.answer_question(enc_image, person_question, tokenizer).strip().lower()
+            print("Human person in the synthesized image: "+person_answer)
+
+            if person_answer.startswith("yes"):
+                attribute = img_explain_model.answer_question(enc_image, image_question_map[fairness_group], tokenizer).strip().lower()
+                print("The synthesized image has the attribute: "+attribute)
+                for item in cgvs_map[fairness_group]:
+                    # CHANGE 2: skip empty answers. An empty string is a substring of every label
+                    # and would otherwise be counted as the first group value (e.g. "male").
+                    # Check if the function's output is a substring of the list item
+                    if attribute != "" and attribute.lower() in item.lower():
+                        concept_group_value = item
+                        break
+                # CHANGE 3: "other", empty or unexpected answers keep concept_group_value = None, so the image
+                # does not count. The original path decrements every counter for "other" and stops the
+                # server with sys.exit for unexpected answers.
+                if concept_group_value is None:
+                    print("The image is not counted (vision model answer: '{}')".format(attribute))
+            else:
+                print("The image is not counted (no human person; vision model answer: '{}')".format(person_answer))
 
             # Report when the generator did not follow the enforcement clause
             if enforced_cgv != "" and concept_group_value != enforced_cgv:
@@ -488,7 +506,11 @@ def process_instruction():
         'monitored': topic_monitoring,
         # Group value enforced by the appended clause (None = prompt unchanged)
         'enforced': enforced_cgv or None,
-        # Raw answer of the vision model (None = not checked; the original path skips enforced images)
+        # Raw answer of the vision model to the person question (None = not asked: request not
+        # monitored, or original path)
+        'vision_person_answer': person_answer,
+        # Raw answer of the vision model (None = not checked; the original path skips enforced images,
+        # the target-based path skips images without a human person)
         'vision_answer': attribute,
         # Group value used for the counter update (None = not counted).
         # In the original path this is the ENFORCED value for enforced images, not a detected one.
