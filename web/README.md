@@ -54,4 +54,6 @@ Which models run is chosen independently of the enforcement setup, in three part
 
 "cheng2025_baseline" is the model combination of the original paper and repo. To test another model, add it to the catalog once and add a new pipeline that refers to it; existing pipelines stay unchanged. Without "active_pipeline", the server runs "cheng2025_baseline".
 
+Every line of generated_images/enforcement_log.jsonl records the active pipeline ("pipeline") and its models ("models": name, model_id and revision per role), so runs with different model combinations can be told apart in the same log file.
+
 Elaborate extensions are left for future work. 

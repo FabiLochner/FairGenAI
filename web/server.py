@@ -283,9 +283,12 @@ path_mode = plan['mode'] if use_targets else 'original'
 
 def log_request(record):
     """Append one request record as a single JSON line to the log file."""
-    # Same fields for every request: run, setup and code path
+    # Same fields for every request: run, setup, code path, pipeline and its resolved models.
+    # The models are stored with name, model_id and revision, so a record stays correct
+    # even if the catalog entry in config.json is changed later.
     record = {'run_id': run_id, 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-              'setup': active_setup, 'mode': path_mode, **record}
+              'setup': active_setup, 'mode': path_mode,
+              'pipeline': active_pipeline, 'models': models, **record}
     # ensure_ascii=False keeps characters like "ä" readable in the file
     with open(log_path, 'a', encoding='utf-8') as log_file:
         log_file.write(json.dumps(record, ensure_ascii=False) + '\n')
