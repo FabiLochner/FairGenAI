@@ -44,4 +44,14 @@ Have VS Code and install Live Server as extension.
 
 One shall modify the config.json for the condition where fairness shall be enforced (variable: "conditioned_value"), the dimensions (variable: fairness_group with options "gender" or "demographics"), as well as the worst case bound (variable: "beta").
 
+#### Models
+
+Which models run is chosen independently of the enforcement setup, in three parts of config.json:
+
+* "model_catalog": every model is defined once, grouped by role ("image_generation", "llm", "image_interpretation"), with a "description", a "model_id" and optionally a "revision".
+* "pipelines": named model combinations. Each pipeline names one catalog entry for "image_generation", "gate_llm" (checks whether a prompt is related and already asks for a group value), "story_llm" (writes the description passed to the image model) and "image_interpretation".
+* "active_pipeline": the pipeline to run.
+
+"cheng2025_baseline" is the model combination of the original paper and repo. To test another model, add it to the catalog once and add a new pipeline that refers to it; existing pipelines stay unchanged. Without "active_pipeline", the server runs "cheng2025_baseline".
+
 Elaborate extensions are left for future work. 

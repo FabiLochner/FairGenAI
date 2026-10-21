@@ -63,8 +63,53 @@ else:
 
 print(f"Active setup: {active_setup}")
 
-# Image synthesis 
-pipeline = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
+# Select the models to run. Chosen independently of the enforcement setup above:
+#  - "model_catalog": every model defined once, grouped by role (image_generation, llm, image_interpretation)
+#  - "pipelines": named model combinations that only refer to names in the catalog
+#  - "active_pipeline": name of the pipeline to run, e.g. "cheng2025_baseline"
+# Note: "pipeline" further below is the diffusers image synthesis object, not a pipeline of config.json.
+
+# Models of the original paper and repo (Cheng et al. 2025).
+# Used when config.json has no "active_pipeline" (e.g. the old format of the original repo).
+CHENG2025_BASELINE_MODELS = {
+    'image_generation': {'name': 'sd_1_5', 'model_id': 'runwayml/stable-diffusion-v1-5'},
+    'gate_llm': {'name': 'gemma2_2b', 'model_id': 'gemma2:2b'},
+    'story_llm': {'name': 'gemma2_2b', 'model_id': 'gemma2:2b'},
+    'image_interpretation': {'name': 'moondream2_2024_07_23', 'model_id': 'vikhyatk/moondream2', 'revision': '2024-07-23'},
+}
+
+# Catalog section each pipeline role is looked up in; gate and story share the "llm" section
+catalog_sections = {'image_generation': 'image_generation', 'gate_llm': 'llm',
+                    'story_llm': 'llm', 'image_interpretation': 'image_interpretation'}
+
+if 'active_pipeline' in data:
+    # Name of the selected pipeline, e.g. "cheng2025_baseline"
+    active_pipeline = data['active_pipeline']
+    # Stop with a clear message if the name does not exist (e.g. a typo in config.json)
+    if active_pipeline not in data.get('pipelines', {}):
+        print(f"Error: active_pipeline '{active_pipeline}' not found under pipelines", file=sys.stderr)
+        sys.exit(1)
+    pipeline_cfg = data['pipelines'][active_pipeline]
+    # Resolve each role to its catalog entry: role -> {name, model_id, revision (optional)}
+    models = {}
+    for role, section in catalog_sections.items():
+        name = pipeline_cfg.get(role)
+        catalog = data.get('model_catalog', {}).get(section, {})
+        if name not in catalog:
+            print(f"Error: {role} '{name}' of pipeline '{active_pipeline}' not found under model_catalog.{section}", file=sys.stderr)
+            sys.exit(1)
+        # The description is only documentation and not needed at runtime
+        models[role] = {'name': name, **{k: v for k, v in catalog[name].items() if k != 'description'}}
+else:
+    active_pipeline = 'cheng2025_baseline'
+    models = CHENG2025_BASELINE_MODELS
+
+print(f"Active pipeline: {active_pipeline}")
+for role, model in models.items():
+    print(f"  {role}: {model}")
+
+# Image synthesis
+pipeline = DiffusionPipeline.from_pretrained(models['image_generation']['model_id'], torch_dtype=torch.float16)
 if hardware_cfg.get('diffusion_GPU'):
     print("Use GPU for the image synthesis task")
     pipeline.to("mps" if torch.backends.mps.is_available() else "cuda")
@@ -72,8 +117,9 @@ else:
     print("Use CPU for the image synthesis task")    
 
 # Image interpretation
-model_id = "vikhyatk/moondream2"
-revision = "2024-07-23"
+model_id = models['image_interpretation']['model_id']
+# None = latest version of the model repository
+revision = models['image_interpretation'].get('revision')
 img_explain_model = AutoModelForCausalLM.from_pretrained(
     model_id, trust_remote_code=True, revision=revision
 )
@@ -93,7 +139,10 @@ CORS(app)  # This will enable CORS for all routes
 
 
 #llm = Ollama(model="llama3", request_timeout=120.0)
-llm = Ollama(model="gemma2:2b", request_timeout=120.0)
+# Gate LLM: checks whether a prompt is related to conditioned_value and already asks for a group value
+gate_llm = Ollama(model=models['gate_llm']['model_id'], request_timeout=120.0)
+# Story LLM: writes the description that is passed to the image model
+story_llm = Ollama(model=models['story_llm']['model_id'], request_timeout=120.0)
 
 header_description = " The person has a strong "
 tail_description = " looking."
@@ -101,7 +150,7 @@ tail_description = " looking."
 def check_prompt_topic(instruction, topic):
     # Placeholder function to call your local LLM
 
-    resp = llm.complete("Simply answer yes or no. Is the following instruction about generating textual descriptions related to "+topic+ "?\n" + instruction)
+    resp = gate_llm.complete("Simply answer yes or no. Is the following instruction about generating textual descriptions related to "+topic+ "?\n" + instruction)
     print("Result of checking prompt topic: "+str(resp))
     return str(resp)
 
@@ -110,7 +159,7 @@ def check_prompt_topic(instruction, topic):
 
 def generate_description_local_llm(instruction):
 
-    resp = llm.complete(instruction)
+    resp = story_llm.complete(instruction)
     print(str(resp))
     return str(resp)
 
@@ -142,12 +191,12 @@ description_annotation_map = {
 }
 
 def check_prompt_gender(instruction):
-    resp = llm.complete(" Answer \"yes\" or \"no\" only. Can you check if the instruction explicitly asks for generating a character of a specific gender (e.g., male)?\n "+instruction)
+    resp = gate_llm.complete(" Answer \"yes\" or \"no\" only. Can you check if the instruction explicitly asks for generating a character of a specific gender (e.g., male)?\n "+instruction)
     print("The prompt asks for gender: "+str(resp))
     return str(resp)
 
 def check_prompt_demographics(instruction):
-    resp = llm.complete(" Answer \"yes\", or \"no\" only. Can you check if the instruction explicitly asks for generating person of a specific demographics (e.g., white, black)?\n "+instruction)
+    resp = gate_llm.complete(" Answer \"yes\", or \"no\" only. Can you check if the instruction explicitly asks for generating person of a specific demographics (e.g., white, black)?\n "+instruction)
     print("The prompt asks for demographics: "+str(resp))
     return str(resp)
 

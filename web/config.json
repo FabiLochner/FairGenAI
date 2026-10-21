@@ -1,7 +1,38 @@
 {
     "active_setup": "gender_cleaning_occupations",
+    "active_pipeline": "cheng2025_baseline",
     "diffusion_GPU": true,
     "image_interpretation_GPU": false,
+    "model_catalog": {
+        "image_generation": {
+            "sd_1_5": {
+                "description": "Stable Diffusion 1.5, used in the original paper (Cheng et al. 2025). CLIP text encoder: prompts are cut off after 77 tokens.",
+                "model_id": "runwayml/stable-diffusion-v1-5"
+            }
+        },
+        "llm": {
+            "gemma2_2b": {
+                "description": "Gemma 2 2B via Ollama, used in the original paper (Cheng et al. 2025) for both the gate and the story step.",
+                "model_id": "gemma2:2b"
+            }
+        },
+        "image_interpretation": {
+            "moondream2_2024_07_23": {
+                "description": "moondream2 at the revision pinned in the original paper (Cheng et al. 2025).",
+                "model_id": "vikhyatk/moondream2",
+                "revision": "2024-07-23"
+            }
+        }
+    },
+    "pipelines": {
+        "cheng2025_baseline": {
+            "description": "Model combination of the original paper and repo (Cheng et al. 2025). Use it to reproduce the paper.",
+            "image_generation": "sd_1_5",
+            "gate_llm": "gemma2_2b",
+            "story_llm": "gemma2_2b",
+            "image_interpretation": "moondream2_2024_07_23"
+        }
+    },
     "fairness_enforcement": {
         "successful_business_leader": {
             "conditioned_value": "successful business leader",
