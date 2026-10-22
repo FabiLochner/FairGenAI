@@ -106,13 +106,17 @@ A missing flag counts as false.
 
 #### C.6 Request log
 
-Every request is appended as one JSON line to generated_images/enforcement_log.jsonl, across server runs. Each line contains:
+Every request is appended as one JSON line to a log file of the machine that runs the server, across server runs: logs/enforcement_log_<chip>-<memory>gb.jsonl, e.g. logs/enforcement_log_apple-m4-16gb.jsonl. The server prints the path at start-up.
 
-* Run and setup: "run_id" (server start time), "timestamp", "setup", "mode" ("original" for setups with "beta", otherwise the target mode).
+The log files are committed; the generated images in generated_images/ are not. As each machine only appends to its own file, commits from different machines do not conflict. To analyse several machines together, read all files in logs/.
+
+Each line contains:
+
+* Run, machine and setup: "run_id" (server start time), "timestamp", "machine" ("chip" and "memory_gb"; images can differ between machines), "setup", "mode" ("original" for setups with "beta", otherwise the target mode).
 * Models: "pipeline" and "models" (per role: name, model_id and, if set, revision, torch_dtype and generation), so runs with different model combinations can be told apart in the same file.
 * Gate: "user_prompt", "gate_related", "gate_group_specified", "monitored".
 * Enforcement and detection: "enforced", "vision_person_answer", "vision_answer", "counted_as".
 * Counters: "counters_before", "counters_after".
 * Output: "image_prompt" (the exact prompt sent to the image model) and "image_file" (in generated_images/).
 
-Lines written before a field was introduced do not contain it; lines without "pipeline" were generated with the models of "cheng2025_baseline".
+Lines written before a field was introduced do not contain it; lines without "pipeline" were generated with the models of "cheng2025_baseline", and lines without "machine" were generated on the machine named in the file name.

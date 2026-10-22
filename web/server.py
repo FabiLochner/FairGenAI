@@ -19,6 +19,9 @@ import json
 import sys
 import time  # timestamps and run id for the request log
 import inspect  # parameters accepted by the image pipeline, to check "generation" in config.json
+import subprocess  # chip name of this machine for the request log
+import platform  # chip name fallback outside macOS
+import re  # file name of the request log from the machine name
 
 # Target-based enforcement: target distribution -> deadlines (beta per group value) -> scheduler
 from targets import build_plan, DeadlineScheduler
@@ -287,7 +290,30 @@ else:
 # ----- Request log (both code paths) -----
 # One JSON line per request, so realised distributions, intervention rates and failed
 # enforcements can be computed afterwards. The file is appended to across server runs.
-log_path = os.path.join('generated_images', 'enforcement_log.jsonl')
+
+
+def machine_info():
+    """Chip and memory of this machine, e.g. {'chip': 'Apple M4', 'memory_gb': 16}."""
+    try:
+        # macOS: e.g. "Apple M4" or "Apple M3 Pro"
+        chip = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        chip = platform.processor() or platform.machine()
+    # Physical memory in GiB (unified memory on Apple Silicon)
+    memory_gb = round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / 2**30)
+    return {'chip': chip, 'memory_gb': memory_gb}
+
+
+# Images can differ between machines (e.g. Apple M3 vs M4), so every request records the machine
+machine = machine_info()
+# One log file per machine, e.g. logs/enforcement_log_apple-m4-16gb.jsonl. The logs are committed;
+# as each machine only appends to its own file, commits from different machines do not conflict.
+# The images stay in generated_images/, which is not committed.
+machine_slug = re.sub(r'[^a-z0-9]+', '-', f"{machine['chip']} {machine['memory_gb']}gb".lower()).strip('-')
+os.makedirs('logs', exist_ok=True)
+log_path = os.path.join('logs', f'enforcement_log_{machine_slug}.jsonl')
+print(f"Request log: {log_path}")
 # Start time of this server run; separates the runs within the same log file
 run_id = time.strftime('%Y-%m-%d_%H-%M-%S')
 # Name of the code path, stored with every request: "original" or the target mode (e.g. "empirical")
@@ -296,11 +322,11 @@ path_mode = plan['mode'] if use_targets else 'original'
 
 def log_request(record):
     """Append one request record as a single JSON line to the log file."""
-    # Same fields for every request: run, setup, code path, pipeline and its resolved models.
+    # Same fields for every request: run, machine, setup, code path, pipeline and its resolved models.
     # The models are stored with name, model_id and revision, so a record stays correct
     # even if the catalog entry in config.json is changed later.
     record = {'run_id': run_id, 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-              'setup': active_setup, 'mode': path_mode,
+              'machine': machine, 'setup': active_setup, 'mode': path_mode,
               'pipeline': active_pipeline, 'models': models, **record}
     # ensure_ascii=False keeps characters like "ä" readable in the file
     with open(log_path, 'a', encoding='utf-8') as log_file:
