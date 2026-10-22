@@ -40,27 +40,23 @@ set_seed(42)
 with open('config.json', 'r') as file:
     data = json.load(file)
 
-# Select the enforcement setup to run.
-# New format: several named setups under "fairness_enforcement"; "active_setup" names the one to use.
-# Old format (original repo): a single setup directly under "fairness_enforcement".
-if 'active_setup' in data:
-    # Name of the selected setup, e.g. "gender_occupation"
-    active_setup = data['active_setup']
-    # Stop with a clear message if the name does not exist (e.g. a typo in config.json)
-    if active_setup not in data['fairness_enforcement']:
-        print(f"Error: active_setup '{active_setup}' not found under fairness_enforcement", file=sys.stderr)
-        sys.exit(1)
-    # Settings of the selected setup: conditioned_value, fairness_group, beta and/or target
-    setup_cfg = data['fairness_enforcement'][active_setup]
-    # GPU flags describe the hardware, not a use case, so they sit at the top level
-    hardware_cfg = data
-else:
-    # Old format has no setup name
-    active_setup = None
-    # The single setup of the old format
-    setup_cfg = data.get('fairness_enforcement', {})
-    # In the old format the GPU flags are inside the setup
-    hardware_cfg = setup_cfg
+# config.json must contain named setups and models (see README, section C).
+# Configs in the flat format of the original repo are no longer supported.
+required_keys = ['active_setup', 'fairness_enforcement', 'active_pipeline', 'pipelines', 'model_catalog']
+missing_keys = [k for k in required_keys if k not in data]
+if missing_keys:
+    print(f"Error: config.json is missing {missing_keys}; see README, section C", file=sys.stderr)
+    sys.exit(1)
+
+# Select the enforcement setup to run: "active_setup" names one of the setups under "fairness_enforcement"
+# Name of the selected setup, e.g. "gender_cleaning_occupations"
+active_setup = data['active_setup']
+# Stop with a clear message if the name does not exist (e.g. a typo in config.json)
+if active_setup not in data['fairness_enforcement']:
+    print(f"Error: active_setup '{active_setup}' not found under fairness_enforcement", file=sys.stderr)
+    sys.exit(1)
+# Settings of the selected setup: conditioned_value, fairness_group, beta and/or target
+setup_cfg = data['fairness_enforcement'][active_setup]
 
 print(f"Active setup: {active_setup}")
 
@@ -70,45 +66,32 @@ print(f"Active setup: {active_setup}")
 #  - "active_pipeline": name of the pipeline to run, e.g. "cheng2025_baseline"
 # Note: "pipeline" further below is the diffusers image synthesis object, not a pipeline of config.json.
 
-# Models of the original paper and repo (Cheng et al. 2025).
-# Used when config.json has no "active_pipeline" (e.g. the old format of the original repo).
-CHENG2025_BASELINE_MODELS = {
-    'image_generation': {'name': 'sd_1_5', 'model_id': 'runwayml/stable-diffusion-v1-5'},
-    'gate_llm': {'name': 'gemma2_2b', 'model_id': 'gemma2:2b'},
-    'story_llm': {'name': 'gemma2_2b', 'model_id': 'gemma2:2b'},
-    'image_interpretation': {'name': 'moondream2_2024_07_23', 'model_id': 'vikhyatk/moondream2', 'revision': '2024-07-23'},
-}
-
 # Catalog section each pipeline role is looked up in; gate and story share the "llm" section
 catalog_sections = {'image_generation': 'image_generation', 'gate_llm': 'llm',
                     'story_llm': 'llm', 'image_interpretation': 'image_interpretation'}
 
-if 'active_pipeline' in data:
-    # Name of the selected pipeline, e.g. "cheng2025_baseline"
-    active_pipeline = data['active_pipeline']
-    # Stop with a clear message if the name does not exist (e.g. a typo in config.json)
-    if active_pipeline not in data.get('pipelines', {}):
-        print(f"Error: active_pipeline '{active_pipeline}' not found under pipelines", file=sys.stderr)
+# Name of the selected pipeline, e.g. "cheng2025_baseline"
+active_pipeline = data['active_pipeline']
+# Stop with a clear message if the name does not exist (e.g. a typo in config.json)
+if active_pipeline not in data['pipelines']:
+    print(f"Error: active_pipeline '{active_pipeline}' not found under pipelines", file=sys.stderr)
+    sys.exit(1)
+pipeline_cfg = data['pipelines'][active_pipeline]
+# Resolve each role to its catalog entry: role -> {name, model_id, revision (optional)}
+models = {}
+for role, section in catalog_sections.items():
+    name = pipeline_cfg.get(role)
+    # An explicit "story_llm": null turns the story step off: the user prompt goes directly to the image model
+    if role == 'story_llm' and role in pipeline_cfg and name is None:
+        models[role] = None
+        continue
+    catalog = data['model_catalog'].get(section, {})
+    if name not in catalog:
+        print(f"Error: {role} '{name}' of pipeline '{active_pipeline}' not found under model_catalog.{section}", file=sys.stderr)
         sys.exit(1)
-    pipeline_cfg = data['pipelines'][active_pipeline]
-    # Resolve each role to its catalog entry: role -> {name, model_id, revision (optional)}
-    models = {}
-    for role, section in catalog_sections.items():
-        name = pipeline_cfg.get(role)
-        # An explicit "story_llm": null turns the story step off: the user prompt goes directly to the image model
-        if role == 'story_llm' and role in pipeline_cfg and name is None:
-            models[role] = None
-            continue
-        catalog = data.get('model_catalog', {}).get(section, {})
-        if name not in catalog:
-            print(f"Error: {role} '{name}' of pipeline '{active_pipeline}' not found under model_catalog.{section}", file=sys.stderr)
-            sys.exit(1)
-        # description and settings_source are only documentation and not needed at runtime
-        models[role] = {'name': name, **{k: v for k, v in catalog[name].items()
-                                         if k not in ('description', 'settings_source')}}
-else:
-    active_pipeline = 'cheng2025_baseline'
-    models = CHENG2025_BASELINE_MODELS
+    # description and settings_source are only documentation and not needed at runtime
+    models[role] = {'name': name, **{k: v for k, v in catalog[name].items()
+                                     if k not in ('description', 'settings_source')}}
 
 print(f"Active pipeline: {active_pipeline}")
 for role, model in models.items():
@@ -135,7 +118,7 @@ if unknown_settings:
     print(f"Error: generation settings {unknown_settings} of {models['image_generation']['name']} are not parameters of {type(pipeline).__name__}", file=sys.stderr)
     sys.exit(1)
 
-if hardware_cfg.get('diffusion_GPU'):
+if data.get('diffusion_GPU'):
     print("Use GPU for the image synthesis task")
     pipeline.to("mps" if torch.backends.mps.is_available() else "cuda")
 else:
@@ -149,7 +132,7 @@ img_explain_model = AutoModelForCausalLM.from_pretrained(
     model_id, trust_remote_code=True, revision=revision
 )
 
-if hardware_cfg.get('image_interpretation_GPU'):
+if data.get('image_interpretation_GPU'):
     print("Use GPU for the image interpretation task")
     img_explain_model.to("cuda")
 else:
