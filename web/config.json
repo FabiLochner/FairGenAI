@@ -7,7 +7,16 @@
         "image_generation": {
             "sd_1_5": {
                 "description": "Stable Diffusion 1.5, used in the original paper (Cheng et al. 2025). CLIP text encoder: prompts are cut off after 77 tokens.",
-                "model_id": "runwayml/stable-diffusion-v1-5"
+                "model_id": "runwayml/stable-diffusion-v1-5",
+                "settings_source": {
+                    "torch_dtype": "Hard-coded in server.py of the original repo (Cheng et al. 2025): DiffusionPipeline.from_pretrained(..., torch_dtype=torch.float16).",
+                    "generation": "Not set in the original repo (pipeline(text) without arguments), so the defaults of diffusers' StableDiffusionPipeline.__call__ applied: num_inference_steps=50, guidance_scale=7.5 (checked in diffusers 0.32.2)."
+                },
+                "torch_dtype": "float16",
+                "generation": {
+                    "num_inference_steps": 50,
+                    "guidance_scale": 7.5
+                }
             }
         },
         "llm": {

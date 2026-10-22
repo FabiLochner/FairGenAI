@@ -18,6 +18,7 @@ import random
 import json
 import sys
 import time  # timestamps and run id for the request log
+import inspect  # parameters accepted by the image pipeline, to check "generation" in config.json
 
 # Target-based enforcement: target distribution -> deadlines (beta per group value) -> scheduler
 from targets import build_plan, DeadlineScheduler
@@ -102,8 +103,9 @@ if 'active_pipeline' in data:
         if name not in catalog:
             print(f"Error: {role} '{name}' of pipeline '{active_pipeline}' not found under model_catalog.{section}", file=sys.stderr)
             sys.exit(1)
-        # The description is only documentation and not needed at runtime
-        models[role] = {'name': name, **{k: v for k, v in catalog[name].items() if k != 'description'}}
+        # description and settings_source are only documentation and not needed at runtime
+        models[role] = {'name': name, **{k: v for k, v in catalog[name].items()
+                                         if k not in ('description', 'settings_source')}}
 else:
     active_pipeline = 'cheng2025_baseline'
     models = CHENG2025_BASELINE_MODELS
@@ -112,8 +114,27 @@ print(f"Active pipeline: {active_pipeline}")
 for role, model in models.items():
     print(f"  {role}: {model if model is not None else 'None (story step off)'}")
 
+# Data types allowed for "torch_dtype" of an image generation model
+torch_dtypes = {'float16': torch.float16, 'bfloat16': torch.bfloat16, 'float32': torch.float32}
+# Default "float16": the value hard-coded in the original server.py
+image_dtype = models['image_generation'].get('torch_dtype', 'float16')
+# Checked before loading, so a typo does not cost the loading time
+if image_dtype not in torch_dtypes:
+    print(f"Error: torch_dtype '{image_dtype}' of {models['image_generation']['name']} must be one of {list(torch_dtypes)}", file=sys.stderr)
+    sys.exit(1)
+# Passed to every image generation call, e.g. num_inference_steps and guidance_scale.
+# Empty = defaults of the diffusers pipeline class, as in the original server.py
+image_generation_settings = models['image_generation'].get('generation', {})
+
 # Image synthesis
-pipeline = DiffusionPipeline.from_pretrained(models['image_generation']['model_id'], torch_dtype=torch.float16)
+pipeline = DiffusionPipeline.from_pretrained(models['image_generation']['model_id'], torch_dtype=torch_dtypes[image_dtype])
+
+# Stop at start-up, not at the first request, if a setting is not a parameter of the loaded pipeline (e.g. a typo)
+unknown_settings = [k for k in image_generation_settings if k not in inspect.signature(pipeline.__call__).parameters]
+if unknown_settings:
+    print(f"Error: generation settings {unknown_settings} of {models['image_generation']['name']} are not parameters of {type(pipeline).__name__}", file=sys.stderr)
+    sys.exit(1)
+
 if hardware_cfg.get('diffusion_GPU'):
     print("Use GPU for the image synthesis task")
     pipeline.to("mps" if torch.backends.mps.is_available() else "cuda")
@@ -169,7 +190,7 @@ def generate_description_local_llm(instruction):
 
 
 def generate_image_from_text(text, output_path):
-    image = pipeline(text).images[0]
+    image = pipeline(text, **image_generation_settings).images[0]
     image.save(output_path)
 
 

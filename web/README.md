@@ -52,6 +52,13 @@ Which models run is chosen independently of the enforcement setup, in three part
 * "pipelines": named model combinations. Each pipeline names one catalog entry for "image_generation", "gate_llm" (checks whether a prompt is related and already asks for a group value), "story_llm" (writes the description passed to the image model) and "image_interpretation".
 * "active_pipeline": the pipeline to run.
 
+Image generation models take two optional fields:
+
+* "torch_dtype": "float16", "bfloat16" or "float32" (default "float16", as hard-coded in the original server.py).
+* "generation": settings passed to every image generation call, e.g. "num_inference_steps" and "guidance_scale". Without it, the defaults of the diffusers pipeline class apply. Settings the pipeline does not accept stop the server at start-up.
+
+"settings_source" documents where these values come from; like "description", it is ignored at runtime and not logged. For "sd_1_5", the values are those the original repo used implicitly.
+
 "story_llm": null turns the story step off: the user prompt (plus the enforcement clause) goes directly to the image model, while the gate still uses "gate_llm". "cheng2025_baseline_no_story" is an example.
 
 "cheng2025_baseline" is the model combination of the original paper and repo. To test another model, add it to the catalog once and add a new pipeline that refers to it; existing pipelines stay unchanged. Without "active_pipeline", the server runs "cheng2025_baseline".
