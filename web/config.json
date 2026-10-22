@@ -17,6 +17,20 @@
                     "num_inference_steps": 50,
                     "guidance_scale": 7.5
                 }
+            },
+            "sd_3_5_medium": {
+                "description": "Stable Diffusion 3.5 Medium (2.5B, MMDiT-X). Text encoders: CLIP-L and CLIP-G (77 tokens) plus T5-XXL (up to max_sequence_length tokens), so long prompts are not cut off at 77 tokens. Gated: needs a Hugging Face login and accepting the Stability AI Community License on the model page.",
+                "model_id": "stabilityai/stable-diffusion-3.5-medium",
+                "settings_source": {
+                    "torch_dtype": "Model card example: torch_dtype=torch.bfloat16.",
+                    "generation": "num_inference_steps=40 and guidance_scale=4.5 from the model card example (the diffusers defaults would be 28 and 7.0). max_sequence_length=256 is the default of StableDiffusion3Pipeline in diffusers 0.32.2; the model card warns of artifacts above 256 T5 tokens."
+                },
+                "torch_dtype": "bfloat16",
+                "generation": {
+                    "num_inference_steps": 40,
+                    "guidance_scale": 4.5,
+                    "max_sequence_length": 256
+                }
             }
         },
         "llm": {
@@ -44,6 +58,20 @@
         "cheng2025_baseline_no_story": {
             "description": "Models of cheng2025_baseline without the story step: the user prompt (plus enforcement clause) goes directly to the image model. Measures the image model's bias without the LLM rewriting it.",
             "image_generation": "sd_1_5",
+            "gate_llm": "gemma2_2b",
+            "story_llm": null,
+            "image_interpretation": "moondream2_2024_07_23"
+        },
+        "cheng2025_with_sd_3_5_medium": {
+            "description": "Models of cheng2025_baseline with Stable Diffusion 3.5 Medium instead of 1.5 as the image model. Measures the effect of a newer image model with the story step.",
+            "image_generation": "sd_3_5_medium",
+            "gate_llm": "gemma2_2b",
+            "story_llm": "gemma2_2b",
+            "image_interpretation": "moondream2_2024_07_23"
+        },
+        "cheng2025_with_sd_3_5_medium_no_story": {
+            "description": "cheng2025_with_sd_3_5_medium without the story step: the user prompt (plus enforcement clause) goes directly to Stable Diffusion 3.5 Medium. Measures its bias without the LLM rewriting the prompt.",
+            "image_generation": "sd_3_5_medium",
             "gate_llm": "gemma2_2b",
             "story_llm": null,
             "image_interpretation": "moondream2_2024_07_23"

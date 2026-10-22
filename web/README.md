@@ -69,10 +69,22 @@ Each entry under "fairness_enforcement" is a named setup with:
 * "pipelines": named model combinations. Each pipeline names one catalog entry for "image_generation", "gate_llm" (checks whether a prompt is related and already asks for a group value), "story_llm" (writes the description passed to the image model) and "image_interpretation". "story_llm": null turns the story step off: the user prompt (plus the enforcement clause) goes directly to the image model, while the gate still uses "gate_llm".
 * "active_pipeline": the pipeline to run.
 
-Two pipelines are predefined:
+Four pipelines are predefined. Together they compare two image models with and without the story step; all other models stay the same:
 
-* "cheng2025_baseline": the models of the original paper and repo (Stable Diffusion 1.5, Gemma 2 2B via Ollama for gate and story, moondream2 at revision 2024-07-23).
-* "cheng2025_baseline_no_story": the same models without the story step.
+| Pipeline | Image model | Story step |
+|---|---|---|
+| "cheng2025_baseline" | Stable Diffusion 1.5 | yes |
+| "cheng2025_baseline_no_story" | Stable Diffusion 1.5 | no |
+| "cheng2025_with_sd_3_5_medium" | Stable Diffusion 3.5 Medium | yes |
+| "cheng2025_with_sd_3_5_medium_no_story" | Stable Diffusion 3.5 Medium | no |
+
+"cheng2025_baseline" is the model combination of the original paper and repo: Stable Diffusion 1.5, Gemma 2 2B via Ollama for gate and story, and moondream2 at revision 2024-07-23.
+
+Stable Diffusion 3.5 Medium needs more resources than the baseline:
+
+* Access: the model is gated. Create a Hugging Face account, accept the Stability AI Community License on the [model page](https://huggingface.co/stabilityai/stable-diffusion-3.5-medium), create an access token of type "Read" and run `huggingface-cli login` once on the machine that runs the server.
+* Disk: about 16 GB for the download.
+* Memory: about 21 GB peak, mostly for the T5-XXL text encoder. Use at least 24 GB of GPU memory, or at least 32 GB of unified memory on Apple Silicon.
 
 To test another model, add it to the catalog once and add a new pipeline that refers to it; existing pipelines stay unchanged.
 
