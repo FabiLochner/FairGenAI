@@ -34,9 +34,9 @@ Have VS Code and install Live Server as extension.
 
 3. Access the application: Open your browser and navigate to the URL provided by the Live Server (e.g., http://127.0.0.1:5500/index.html).
 
-4. Test the application: Each time you submit the form, the application should call the LLM, generate an image using Stable Diffusion, and display both the text response and the generated image as a link.
+4. Test the application: Each time you submit the form, the application should call the LLM, generate an image using Stable Diffusion, and display both the text response and the generated image as a link. Without the story step (see C.3), the text response only notes that the prompt was sent directly to the image model.
 
-    * In the form, please enter "successful business leader" or of similar kind, as this is the only item now being enforced for fairness. One can change it in the config.json to items such as "bad cook".  
+    * In the form, enter a prompt related to the "conditioned_value" of the active setup (see C.2), e.g. "office cleaner" for "gender_cleaning_occupations" or "successful business leader" for "successful_business_leader". Only related prompts are monitored and, if needed, enforced; the topic is changed by selecting or adding a setup in config.json.
 
 5. When fairness is enabled, it will explitly notify the user that fairness constraints enforce the generation to be "male" or "female" (for gender fairness), and inform user that they can make the gender explicit, in order not to be enforced. 
 
